@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  # SSH用キーペアの指定
+  KeyPair:
+    Description: KeyPair Name
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: my-pc
+  # SSHを許可するIP
+  MyIP:
+    Description: My IP
+    Type:  String
+    Default: 180.48.171.169/32
+  AmiId:
+    Description: AMI ID
+    Type: AWS::EC2::Image::Id
+
+Resources:
+  PackerLessonVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      Tags:
+      - Key: Name
+        Value: PackerLessonVPC
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: PackerLessonVPC-IGW
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref PackerLessonVPC
+      InternetGatewayId: !Ref InternetGateway
+  FrontendRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: AttachGateway
+    Properties:
+      VpcId: !Ref PackerLessonVPC
+      Tags:
+      - Key: Name
+        Value: PackerLessonVPC-FrontendRoute
+  FrontendRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref FrontendRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  FrontendSubnet:
+    Type: AWS::EC2::Subnet
+    DependsOn: AttachGateway
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: 'true'
+      VpcId: !Ref PackerLessonVPC
+      Tags:
+      - Key: Name
+        Value: PackerLessonVPC-FrontendSubnet
+  FrontendSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref FrontendSubnet
+      RouteTableId: !Ref FrontendRouteTable
+  PackerLessonSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: PackerLessonSG
+      VpcId: !Ref PackerLessonVPC
+      Tags:
+        - Key: 'Name'
+          Value: 'PackerLessonSG'
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: !Ref MyIP
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: !Ref MyIP
+  PackerLessonEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: 't2.micro'
+      SecurityGroupIds: 
+        - !GetAtt PackerLessonSecurityGroup.GroupId
+      SubnetId: !Ref FrontendSubnet
+      ImageId: !Ref AmiId
+      KeyName: !Ref KeyPair
+      Tags: 
+        - Key: Name
+          Value: PackerLessonEC2
+  PackerLessonEIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: vpc
+  AttachEIP:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt PackerLessonEIP.AllocationId
+      InstanceId: !Ref PackerLessonEC2

@@ -6,3 +6,7 @@ crash.log
 
 # For built boxes
 *.box
+
+packer-post-processor-amazon-ami-management
+
+.env
